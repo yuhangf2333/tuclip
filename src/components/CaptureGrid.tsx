@@ -10,7 +10,12 @@ interface CaptureGridProps {
   captures: CaptureItem[];
   selectedCaptureId: string | null;
   onOpenCapture: (captureId: string) => Promise<void>;
+  onPublishCapture: (captureId: string, workspaceId: string | null) => Promise<void>;
+  onCopyRemoteUrl: (captureId: string, workspaceId: string | null) => Promise<void>;
+  onOpenRemoteUrl: (captureId: string, workspaceId: string | null) => Promise<void>;
   onReorder: (captureId: string, direction: -1 | 1) => Promise<void>;
+  publishEnabled: boolean;
+  publishDisabledReason: string;
   strings: UiStrings;
   tags: WorkspaceTag[];
   showTags: boolean;
@@ -26,7 +31,12 @@ export function CaptureGrid({
   captures,
   selectedCaptureId,
   onOpenCapture,
+  onPublishCapture,
+  onCopyRemoteUrl,
+  onOpenRemoteUrl,
   onReorder,
+  publishEnabled,
+  publishDisabledReason,
   strings,
   tags,
   showTags,
@@ -79,6 +89,13 @@ export function CaptureGrid({
   const renderRow = (capture: CaptureItem, index: number, total: number, allowReorder = true) => {
     const tag = capture.tagId ? tagMap.get(capture.tagId) : null;
     const showInlineTag = showTags && tag && viewMode === "list";
+    const publishLabel =
+      capture.remote.publishStatus === "publishing"
+        ? strings.captures.publishing
+        : capture.remote.remoteUrl
+          ? strings.captures.republish
+          : strings.captures.publish;
+    const publishDisabled = capture.remote.publishStatus === "publishing";
 
     return (
       <article
@@ -106,33 +123,66 @@ export function CaptureGrid({
           </div>
 
           <div className="capture-row__actions">
-            <span className="status-tag">{statusLabel(capture.status, strings)}</span>
-            {allowReorder ? (
-              <>
-                <button
-                  className="icon-button subtle"
-                  disabled={index === 0}
-                  onClick={() => void onReorder(capture.id, -1)}
-                  title={strings.captures.moveUp}
-                  type="button"
-                >
-                  <ArrowUp size={15} />
-                </button>
-                <button
-                  className="icon-button subtle"
-                  disabled={index === total - 1}
-                  onClick={() => void onReorder(capture.id, 1)}
-                  title={strings.captures.moveDown}
-                  type="button"
-                >
-                  <ArrowDown size={15} />
-                </button>
-              </>
-            ) : null}
-            <button className="ghost-button" onClick={() => void onOpenCapture(capture.id)} type="button">
-              <PencilLine size={15} />
-              {strings.captures.edit}
-            </button>
+            <div className="capture-row__status-group">
+              <span className="status-tag">{statusLabel(capture.status, strings)}</span>
+              <span className="status-tag">{strings.remoteSyncStatuses[capture.remote.syncStatus]}</span>
+              <span className="status-tag">{strings.remotePublishStatuses[capture.remote.publishStatus]}</span>
+            </div>
+            <div className="capture-row__controls">
+              {allowReorder ? (
+                <>
+                  <button
+                    className="icon-button subtle"
+                    disabled={index === 0}
+                    onClick={() => void onReorder(capture.id, -1)}
+                    title={strings.captures.moveUp}
+                    type="button"
+                  >
+                    <ArrowUp size={15} />
+                  </button>
+                  <button
+                    className="icon-button subtle"
+                    disabled={index === total - 1}
+                    onClick={() => void onReorder(capture.id, 1)}
+                    title={strings.captures.moveDown}
+                    type="button"
+                  >
+                    <ArrowDown size={15} />
+                  </button>
+                </>
+              ) : null}
+              <button
+                className="ghost-button"
+                disabled={publishDisabled}
+                onClick={() => void onPublishCapture(capture.id, capture.workspaceId === "inbox" ? null : capture.workspaceId)}
+                title={publishDisabled ? publishLabel : publishEnabled ? publishLabel : publishDisabledReason}
+                type="button"
+              >
+                {publishLabel}
+              </button>
+              {capture.remote.remoteUrl ? (
+                <>
+                  <button
+                    className="ghost-button"
+                    onClick={() => void onCopyRemoteUrl(capture.id, capture.workspaceId === "inbox" ? null : capture.workspaceId)}
+                    type="button"
+                  >
+                    {strings.captures.copyLink}
+                  </button>
+                  <button
+                    className="ghost-button"
+                    onClick={() => void onOpenRemoteUrl(capture.id, capture.workspaceId === "inbox" ? null : capture.workspaceId)}
+                    type="button"
+                  >
+                    {strings.captures.openRemote}
+                  </button>
+                </>
+              ) : null}
+              <button className="ghost-button" onClick={() => void onOpenCapture(capture.id)} type="button">
+                <PencilLine size={15} />
+                {strings.captures.edit}
+              </button>
+            </div>
           </div>
         </div>
       </article>

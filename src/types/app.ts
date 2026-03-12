@@ -18,6 +18,7 @@ export interface Workspace {
   createdAt: string;
   isInbox: boolean;
   tags: WorkspaceTag[];
+  remoteSettings: WorkspaceRemoteSettings;
 }
 
 export interface CaptureItem {
@@ -31,6 +32,7 @@ export interface CaptureItem {
   sourceHash: string;
   tagId: string | null;
   note: string;
+  remote: CaptureRemoteState;
 }
 
 export interface CaptureVersion {
@@ -74,6 +76,11 @@ export type ThemeMode = "system" | "light" | "dark";
 export type AccentTheme = "blue" | "graphite" | "mint" | "rose";
 export type DetectionPreset = "balanced" | "dense" | "focused";
 export type CloseAction = "tray" | "quit";
+export type RemoteJobKind = "workspace-sync" | "capture-publish";
+export type RemoteJobStatus = "queued" | "running" | "failed";
+export type RemoteSyncStatus = "idle" | "syncing" | "synced" | "failed" | "conflict";
+export type RemotePublishStatus = "idle" | "publishing" | "published" | "failed";
+export type RemoteProvider = "webdav" | "s3";
 
 export interface PreferencesConfig {
   language: LanguageCode;
@@ -88,6 +95,98 @@ export interface PreferencesConfig {
   closeAction: CloseAction;
 }
 
+export interface WebDavConnectionConfig {
+  enabled: boolean;
+  baseUrl: string;
+  username: string;
+  rootPath: string;
+  hasPassword: boolean;
+  lastTestedAt: string | null;
+  lastTestSuccess: boolean | null;
+  lastTestMessage: string;
+}
+
+export interface S3ConnectionConfig {
+  enabled: boolean;
+  endpoint: string;
+  region: string;
+  bucket: string;
+  accessKeyId: string;
+  publicBaseUrl: string;
+  forcePathStyle: boolean;
+  hasSecretAccessKey: boolean;
+  lastTestedAt: string | null;
+  lastTestSuccess: boolean | null;
+  lastTestMessage: string;
+}
+
+export interface RemoteConnectionConfig {
+  enabled: boolean;
+  webdav: WebDavConnectionConfig;
+  s3: S3ConnectionConfig;
+}
+
+export interface WorkspaceRemoteSettings {
+  webdavEnabled: boolean;
+  webdavPath: string;
+  s3Enabled: boolean;
+  s3Prefix: string;
+  lastSyncAt: string | null;
+  lastSyncStatus: RemoteSyncStatus;
+  lastSyncMessage: string;
+  lastPublishAt: string | null;
+  lastPublishStatus: RemotePublishStatus;
+  lastPublishMessage: string;
+}
+
+export interface CaptureRemoteState {
+  syncStatus: RemoteSyncStatus;
+  publishStatus: RemotePublishStatus;
+  remoteUrl: string | null;
+  remoteObjectKey: string | null;
+  lastSyncedAt: string | null;
+  lastPublishedAt: string | null;
+  lastError: string;
+}
+
+export interface SyncJob {
+  id: string;
+  kind: RemoteJobKind;
+  workspaceId: string | null;
+  captureId: string | null;
+  status: RemoteJobStatus;
+  attempts: number;
+  error: string;
+  scheduledAt: string;
+  updatedAt: string;
+}
+
+export interface SyncConflict {
+  id: string;
+  workspaceId: string | null;
+  relativePath: string;
+  localPath: string;
+  incomingPath: string;
+  createdAt: string;
+  status: "open" | "resolved";
+  resolvedAt?: string;
+  resolution?: string;
+}
+
+export interface RemoteStatePayload {
+  connections: RemoteConnectionConfig;
+  workspaceSettings: Record<string, WorkspaceRemoteSettings>;
+  jobs: SyncJob[];
+  conflicts: SyncConflict[];
+  summary: {
+    enabled: boolean;
+    configured: boolean;
+    pendingJobs: number;
+    conflicts: number;
+    activeWorkspaceStatus: RemoteSyncStatus;
+  };
+}
+
 export interface AppStatePayload {
   monitoringPaused: boolean;
   activeWorkspaceId: string | null;
@@ -97,6 +196,7 @@ export interface AppStatePayload {
   editorTargetCaptureId: string | null;
   inboxRoot: string;
   tags: QuickTag[];
+  remote: RemoteStatePayload["summary"];
 }
 
 export interface CropArea {

@@ -3,6 +3,9 @@ import type {
   CloseAction,
   DetectionPreset,
   LanguageCode,
+  RemoteProvider,
+  RemotePublishStatus,
+  RemoteSyncStatus,
   ShortcutConfig,
   ThemeMode,
 } from "../types/app";
@@ -17,6 +20,7 @@ export interface UiStrings {
   commands: {
     start: string;
     pause: string;
+    sync: string;
     settings: string;
     newSpace: string;
   };
@@ -50,6 +54,20 @@ export interface UiStrings {
     moveDown: string;
     saved: string;
     edited: string;
+    syncNow: string;
+    publish: string;
+    republish: string;
+    publishing: string;
+    publishUnavailable: string;
+    publishCloudOff: string;
+    publishSetupNeeded: string;
+    publishWorkspaceOff: string;
+    publishSuccess: string;
+    republishSuccess: string;
+    publishFailed: string;
+    copyLink: string;
+    copyLinkSuccess: string;
+    openRemote: string;
   };
   pending: {
     eyebrow: string;
@@ -109,24 +127,73 @@ export interface UiStrings {
     tools: string;
     editor: string;
     popup: string;
+    remote: string;
+    serverUrl: string;
+    username: string;
+    password: string;
+    endpoint: string;
+    region: string;
+    bucket: string;
+    accessKeyId: string;
+    secretAccessKey: string;
+    publicBaseUrl: string;
+    forcePathStyle: string;
+    remoteFolder: string;
+    publishPrefix: string;
+    workspaceBinding: string;
+    test: string;
+    retryFailed: string;
     yes: string;
     no: string;
+  };
+  remote: {
+    title: string;
+    webdav: string;
+    s3: string;
+    workspace: string;
+    summary: string;
+    masterHint: string;
+    disabledHint: string;
+    webdavHint: string;
+    s3Hint: string;
+    workspaceHint: string;
+    summaryHint: string;
+    jobs: string;
+    conflicts: string;
+    configured: string;
+    notConfigured: string;
+    saveConnection: string;
+    latestResult: string;
+    none: string;
+    tooltipOff: string;
+    tooltipNotConfigured: string;
+    tooltipConflict: string;
+    tooltipFailed: string;
+    tooltipSyncing: string;
+    tooltipReady: string;
+    resolveKeep: string;
+    resolveIncoming: string;
+    openConflictFolder: string;
   };
   languages: Record<LanguageCode, string>;
   themes: Record<ThemeMode, string>;
   accents: Record<AccentTheme, string>;
   detections: Record<DetectionPreset, string>;
+  remoteProviders: Record<RemoteProvider, string>;
+  remoteSyncStatuses: Record<RemoteSyncStatus, string>;
+  remotePublishStatuses: Record<RemotePublishStatus, string>;
   shortcutLabels: Record<ShortcutField, string>;
 }
 
 const en: UiStrings = {
   shellEyebrow: "Capture utility",
-  appName: "GleanDex",
-  loading: "Starting GleanDex…",
+  appName: "TuClip",
+  loading: "Starting TuClip…",
   syncing: "Syncing…",
   commands: {
     start: "Start",
     pause: "Pause",
+    sync: "Sync",
     settings: "Settings",
     newSpace: "New",
   },
@@ -160,6 +227,20 @@ const en: UiStrings = {
     moveDown: "Move down",
     saved: "Saved",
     edited: "Edited",
+    syncNow: "Sync now",
+    publish: "Upload",
+    republish: "Upload again",
+    publishing: "Uploading…",
+    publishUnavailable: "Host unavailable",
+    publishCloudOff: "Cloud sync is off. Turn it on before uploading.",
+    publishSetupNeeded: "Set up S3 / R2 image hosting before uploading.",
+    publishWorkspaceOff: "Image hosting is not enabled for this workspace yet.",
+    publishSuccess: "Uploaded to the remote image host.",
+    republishSuccess: "Remote image was updated.",
+    publishFailed: "Upload failed.",
+    copyLink: "Copy link",
+    copyLinkSuccess: "Remote link copied.",
+    openRemote: "Open remote",
   },
   pending: {
     eyebrow: "Queue",
@@ -222,8 +303,53 @@ const en: UiStrings = {
     tools: "Tools",
     editor: "Editor",
     popup: "Popup",
+    remote: "Cloud sync",
+    serverUrl: "Server URL",
+    username: "Username",
+    password: "Password",
+    endpoint: "Endpoint",
+    region: "Region",
+    bucket: "Bucket",
+    accessKeyId: "Access key",
+    secretAccessKey: "Secret key",
+    publicBaseUrl: "Public base URL",
+    forcePathStyle: "Path-style URL",
+    remoteFolder: "Remote folder",
+    publishPrefix: "Publish prefix",
+    workspaceBinding: "Workspace",
+    test: "Test",
+    retryFailed: "Retry failed",
     yes: "On",
     no: "Off",
+  },
+  remote: {
+    title: "Cloud sync",
+    webdav: "Drive sync (WebDAV)",
+    s3: "Image hosting (S3 / R2)",
+    workspace: "Workspace binding",
+    summary: "Summary",
+    masterHint: "Keep workspaces in sync across devices, or publish final screenshots to a remote image host.",
+    disabledHint: "Cloud sync is off. Turn it on only if you want multi-device sync or remote image links.",
+    webdavHint: "Mirror the whole workspace to a WebDAV drive such as Nextcloud, NAS, or Nutstore.",
+    s3Hint: "Publish the final exported image to S3 or R2 and keep a stable remote URL for sharing.",
+    workspaceHint: "Choose which workspace uses drive sync or image hosting, and set its remote path rules.",
+    summaryHint: "Recent remote tasks and conflicts are shown here for this device.",
+    jobs: "Jobs",
+    conflicts: "Conflicts",
+    configured: "Configured",
+    notConfigured: "Not configured",
+    saveConnection: "Save connection",
+    latestResult: "Latest result",
+    none: "None",
+    tooltipOff: "Cloud sync is off",
+    tooltipNotConfigured: "Cloud sync is on, but no remote connection is configured yet",
+    tooltipConflict: "Cloud sync has conflicts that need review",
+    tooltipFailed: "Cloud sync failed",
+    tooltipSyncing: "Cloud sync is running",
+    tooltipReady: "Cloud sync is ready",
+    resolveKeep: "Keep local",
+    resolveIncoming: "Use incoming",
+    openConflictFolder: "Open folder",
   },
   languages: {
     en: "English",
@@ -245,6 +371,23 @@ const en: UiStrings = {
     dense: "Dense",
     focused: "Focused",
   },
+  remoteProviders: {
+    webdav: "WebDAV",
+    s3: "S3 / R2",
+  },
+  remoteSyncStatuses: {
+    idle: "Not synced",
+    syncing: "Syncing",
+    synced: "Synced",
+    failed: "Failed",
+    conflict: "Conflict",
+  },
+  remotePublishStatuses: {
+    idle: "Not published",
+    publishing: "Publishing",
+    published: "Published",
+    failed: "Publish failed",
+  },
   shortcutLabels: {
     rectTool: "Rect",
     numberTool: "Number",
@@ -264,12 +407,13 @@ const en: UiStrings = {
 
 const zh: UiStrings = {
   shellEyebrow: "截图工具",
-  appName: "GleanDex",
-  loading: "正在启动 GleanDex…",
+  appName: "TuClip",
+  loading: "正在启动 TuClip…",
   syncing: "同步中…",
   commands: {
     start: "开始",
     pause: "暂停",
+    sync: "同步",
     settings: "设置",
     newSpace: "新建",
   },
@@ -303,6 +447,20 @@ const zh: UiStrings = {
     moveDown: "下移",
     saved: "已保存",
     edited: "已编辑",
+    syncNow: "立即同步",
+    publish: "上传图床",
+    republish: "重新上传",
+    publishing: "上传中…",
+    publishUnavailable: "图床未配置",
+    publishCloudOff: "云同步未开启，不能上传图床。",
+    publishSetupNeeded: "请先配置并启用 S3 / R2 图床。",
+    publishWorkspaceOff: "当前工作区还没开启图床发布。",
+    publishSuccess: "已上传到图床。",
+    republishSuccess: "图床上的图片已更新。",
+    publishFailed: "上传图床失败。",
+    copyLink: "复制链接",
+    copyLinkSuccess: "图床链接已复制。",
+    openRemote: "打开远端",
   },
   pending: {
     eyebrow: "队列",
@@ -365,8 +523,53 @@ const zh: UiStrings = {
     tools: "工具",
     editor: "编辑",
     popup: "弹窗",
+    remote: "云同步",
+    serverUrl: "服务器地址",
+    username: "用户名",
+    password: "密码",
+    endpoint: "端点",
+    region: "区域",
+    bucket: "桶名",
+    accessKeyId: "Access Key",
+    secretAccessKey: "Secret Key",
+    publicBaseUrl: "公开域名",
+    forcePathStyle: "Path Style",
+    remoteFolder: "远端目录",
+    publishPrefix: "发布前缀",
+    workspaceBinding: "工作区",
+    test: "测试连接",
+    retryFailed: "重试失败项",
     yes: "开",
     no: "关",
+  },
+  remote: {
+    title: "云同步",
+    webdav: "云盘同步（WebDAV）",
+    s3: "图床发布（S3 / R2）",
+    workspace: "工作区绑定",
+    summary: "概览",
+    masterHint: "把工作区同步到云盘，或者把最终截图发布到图床，两个能力可以分开使用。",
+    disabledHint: "云同步当前关闭。只有在你需要多设备同步或远程图片链接时才需要开启。",
+    webdavHint: "同步整个工作区到支持 WebDAV 的云盘，例如 Nextcloud、NAS、坚果云等。",
+    s3Hint: "只发布最终导出图到 S3 / R2 图床，并生成可分享的稳定远程链接。",
+    workspaceHint: "给具体工作区选择是否启用云盘同步或图床发布，并设置对应的远端目录规则。",
+    summaryHint: "这里显示当前设备上的远程任务和冲突状态。",
+    jobs: "任务",
+    conflicts: "冲突",
+    configured: "已配置",
+    notConfigured: "未配置",
+    saveConnection: "保存连接",
+    latestResult: "最近结果",
+    none: "暂无",
+    tooltipOff: "云同步当前关闭",
+    tooltipNotConfigured: "云同步已开启，但还没有配置远程连接",
+    tooltipConflict: "云同步存在冲突，等待处理",
+    tooltipFailed: "云同步失败",
+    tooltipSyncing: "云同步正在运行",
+    tooltipReady: "云同步已就绪",
+    resolveKeep: "保留本地",
+    resolveIncoming: "使用来件",
+    openConflictFolder: "打开文件夹",
   },
   languages: {
     en: "English",
@@ -387,6 +590,23 @@ const zh: UiStrings = {
     balanced: "平衡",
     dense: "密集",
     focused: "精确",
+  },
+  remoteProviders: {
+    webdav: "WebDAV",
+    s3: "S3 / R2",
+  },
+  remoteSyncStatuses: {
+    idle: "未同步",
+    syncing: "同步中",
+    synced: "已同步",
+    failed: "同步失败",
+    conflict: "冲突",
+  },
+  remotePublishStatuses: {
+    idle: "未发布",
+    publishing: "发布中",
+    published: "已发布",
+    failed: "发布失败",
   },
   shortcutLabels: {
     rectTool: "框选",

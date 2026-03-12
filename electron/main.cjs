@@ -20,7 +20,6 @@ const {
   INBOX_ID,
   SYSTEM_DIR,
   copyFile,
-  defaultAnnotationDocument,
   deleteCapture,
   ensureWorkspaceLayout,
   getAnnotationDocument,
@@ -33,7 +32,7 @@ const {
   normalizeCaptureTag,
   nextOrderIndex,
   nextPublicFilename,
-  readWorkspaceIndex,
+  refreshTagCache,
   removeDirIfExists,
   removeFileIfExists,
   replaceAnnotationDocument,
@@ -41,7 +40,9 @@ const {
   resolveWorkspace,
   saveConfig,
   upsertCapture,
+  writeAggregatedTags,
 } = require("./storage.cjs");
+const { createRemoteServices } = require("./remote.cjs");
 
 let liquidGlass = null;
 try {
@@ -62,7 +63,9 @@ const runtime = {
   popupHideTimeout: null,
   tray: null,
   clipboardInterval: null,
+  syncInterval: null,
   isQuitting: false,
+  remote: null,
   windows: {
     main: null,
     popup: null,
@@ -77,7 +80,24 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-function createGleanDexIcon(size) {
+function resolveTuClipIconPath() {
+  const candidates = [
+    path.join(__dirname, "..", "public", "icons", "tuclip-icon.png"),
+    path.join(__dirname, "..", "public", "tuclipicon.png"),
+  ];
+
+  return candidates.find((candidate) => fs.existsSync(candidate)) || null;
+}
+
+function createTuClipIcon(size) {
+  const iconPath = resolveTuClipIconPath();
+  if (iconPath) {
+    const icon = nativeImage.createFromPath(iconPath);
+    if (!icon.isEmpty()) {
+      return icon.resize({ width: size, height: size });
+    }
+  }
+
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 64 64">
       <defs>
@@ -241,7 +261,7 @@ function createMainWindow() {
     width: 920,
     height: 560,
     show: false,
-    icon: createGleanDexIcon(128),
+    icon: createTuClipIcon(128),
     fullscreenable: false,
     resizable: false,
     movable: true,
@@ -298,7 +318,7 @@ function createPopupWindow() {
 }
 
 function createTray() {
-  const tray = new Tray(createGleanDexIcon(18));
+  const tray = new Tray(createTuClipIcon(18));
   tray.setToolTip(APP_NAME);
   tray.setContextMenu(
     Menu.buildFromTemplate([
@@ -314,8 +334,7 @@ function createTray() {
       {
         label: "Pause / Resume Monitoring",
         click: () => {
-          runtime.config.monitoringPaused = !runtime.config.monitoringPaused;
-          saveConfig(app, runtime.config);
+          setMonitoringPaused(!runtime.config.monitoringPaused);
         },
       },
       { type: "separator" },
@@ -333,6 +352,13 @@ function createTray() {
 }
 
 function buildAppState() {
+  const remoteSummary = runtime.remote?.getRemoteState(runtime.config.activeWorkspaceId ?? null)?.summary ?? {
+    enabled: false,
+    configured: false,
+    pendingJobs: 0,
+    conflicts: 0,
+    activeWorkspaceStatus: "idle",
+  };
   return {
     monitoringPaused: runtime.config.monitoringPaused,
     activeWorkspaceId: runtime.config.activeWorkspaceId,
@@ -342,11 +368,36 @@ function buildAppState() {
     editorTargetCaptureId: runtime.config.editorTargetCaptureId,
     inboxRoot: resolveWorkspace(app, runtime.config, INBOX_ID).rootPath,
     tags: runtime.config.tags,
+    remote: remoteSummary,
   };
 }
 
 function hashBuffer(buffer) {
   return crypto.createHash("sha256").update(buffer).digest("hex");
+}
+
+function primeClipboardBaseline() {
+  const image = clipboard.readImage();
+  if (image.isEmpty()) {
+    runtime.lastClipboardHash = null;
+    return null;
+  }
+  const pngBuffer = image.toPNG();
+  runtime.lastClipboardHash = pngBuffer.length ? hashBuffer(pngBuffer) : null;
+  return runtime.lastClipboardHash;
+}
+
+function setMonitoringPaused(nextPaused) {
+  const paused =
+    typeof nextPaused === "boolean" ? nextPaused : !runtime.config.monitoringPaused;
+
+  if (runtime.config.monitoringPaused && !paused) {
+    primeClipboardBaseline();
+  }
+
+  runtime.config.monitoringPaused = paused;
+  saveConfig(app, runtime.config);
+  return buildAppState();
 }
 
 function stagePendingCapture(pngBuffer, sourceHash) {
@@ -485,6 +536,8 @@ function savePendingCapture(pendingId, targetWorkspaceId, openEditor) {
 
   upsertCapture(workspace.rootPath, capture);
   insertVersion(workspace.rootPath, version);
+  runtime.remote?.queueWorkspaceSync(workspace.id === INBOX_ID ? null : workspace.id);
+  runtime.remote?.queueCapturePublish(capture.id, workspace.id === INBOX_ID ? null : workspace.id);
 
   if (openEditor) {
     runtime.config.editorTargetCaptureId = capture.id;
@@ -535,6 +588,8 @@ function saveCaptureEdit(captureId, workspaceId, renderedPngBase64, annotationDo
     currentVersionId: versionId,
   };
   upsertCapture(workspace.rootPath, updated);
+  runtime.remote?.queueWorkspaceSync(workspace.id === INBOX_ID ? null : workspace.id);
+  runtime.remote?.queueCapturePublish(updated.id, workspace.id === INBOX_ID ? null : workspace.id);
   return updated;
 }
 
@@ -546,6 +601,7 @@ function updateCaptureNote(captureId, workspaceId, note) {
     note: String(note || "").trim(),
   };
   upsertCapture(workspace.rootPath, updated);
+  runtime.remote?.queueWorkspaceSync(workspace.id === INBOX_ID ? null : workspace.id);
   return updated;
 }
 
@@ -557,6 +613,7 @@ function updateCaptureTag(captureId, workspaceId, tagId) {
     tagId: normalizeCaptureTag(runtime.config, workspace.id, tagId),
   };
   upsertCapture(workspace.rootPath, updated);
+  runtime.remote?.queueWorkspaceSync(workspace.id === INBOX_ID ? null : workspace.id);
   return updated;
 }
 
@@ -618,19 +675,22 @@ function moveCaptureToWorkspace(captureId, sourceWorkspaceId, targetWorkspaceId)
   removeDirIfExists(path.join(source.rootPath, SYSTEM_DIR, "originals", capture.id));
   removeDirIfExists(path.join(source.rootPath, SYSTEM_DIR, "versions", capture.id));
   removeDirIfExists(path.join(source.rootPath, SYSTEM_DIR, "annotations", capture.id));
+  runtime.remote?.queueWorkspaceSync(source.id === INBOX_ID ? null : source.id);
+  runtime.remote?.queueWorkspaceSync(target.id === INBOX_ID ? null : target.id);
+  runtime.remote?.queueCapturePublish(moved.id, target.id === INBOX_ID ? null : target.id);
   return moved;
 }
 
 function registerIpc() {
-  ipcMain.handle("gleandex:getAppState", () => buildAppState());
-  ipcMain.handle("gleandex:listWorkspaces", () => listWorkspaces(app, runtime.config));
-  ipcMain.handle("gleandex:pickDirectory", async () => {
+  ipcMain.handle("tuclip:getAppState", () => buildAppState());
+  ipcMain.handle("tuclip:listWorkspaces", () => listWorkspaces(app, runtime.config));
+  ipcMain.handle("tuclip:pickDirectory", async () => {
     const result = await dialog.showOpenDialog(runtime.windows.main, {
       properties: ["openDirectory", "createDirectory"],
     });
     return result.canceled ? null : result.filePaths[0];
   });
-  ipcMain.handle("gleandex:createWorkspace", (_event, name, rootPath, appendTimestamp) => {
+  ipcMain.handle("tuclip:createWorkspace", (_event, name, rootPath, appendTimestamp) => {
     ensureWorkspaceLayout(rootPath);
     const workspace = {
       id: crypto.randomUUID(),
@@ -648,7 +708,7 @@ function registerIpc() {
     return listWorkspaces(app, runtime.config).find((item) => item.id === workspace.id);
   });
   ipcMain.handle(
-    "gleandex:showWorkspaceContextMenu",
+    "tuclip:showWorkspaceContextMenu",
     (event, rootPath, workspaceLabel, openFolderLabel) => {
       const win = BrowserWindow.fromWebContents(event.sender);
       const menu = Menu.buildFromTemplate([
@@ -663,17 +723,17 @@ function registerIpc() {
       return true;
     },
   );
-  ipcMain.handle("gleandex:setActiveWorkspace", (_event, workspaceId) => {
+  ipcMain.handle("tuclip:setActiveWorkspace", (_event, workspaceId) => {
     runtime.config.activeWorkspaceId = workspaceId === INBOX_ID ? null : workspaceId;
     saveConfig(app, runtime.config);
     return buildAppState();
   });
-  ipcMain.handle("gleandex:updateShortcuts", (_event, shortcuts) => {
+  ipcMain.handle("tuclip:updateShortcuts", (_event, shortcuts) => {
     runtime.config.shortcuts = { ...runtime.config.shortcuts, ...shortcuts };
     saveConfig(app, runtime.config);
     return runtime.config.shortcuts;
   });
-  ipcMain.handle("gleandex:updatePreferences", (_event, preferences) => {
+  ipcMain.handle("tuclip:updatePreferences", (_event, preferences) => {
     const nextCloseAction =
       preferences?.closeAction === "quit" ? "quit" : "tray";
     runtime.config.preferences = {
@@ -688,50 +748,79 @@ function registerIpc() {
     saveConfig(app, runtime.config);
     return runtime.config.preferences;
   });
-  ipcMain.handle("gleandex:updateTags", (_event, tags) => {
-    runtime.config.tags = (tags || []).map((tag) => ({
+  ipcMain.handle("tuclip:updateTags", (_event, tags) => {
+    const nextTags = (tags || []).map((tag) => ({
       id: tag.id || crypto.randomUUID(),
       label: String(tag.label || "").trim() || "Tag",
       color: tag.color || "#0f6cbd",
       workspaceId: tag.workspaceId ?? null,
       visible: tag.visible !== false,
     }));
+    writeAggregatedTags(app, runtime.config, nextTags);
+    runtime.config.tags = refreshTagCache(app, runtime.config);
     saveConfig(app, runtime.config);
+    const workspaceIds = new Set([null, ...runtime.config.workspaces.map((workspace) => workspace.id)]);
+    workspaceIds.forEach((workspaceId) => runtime.remote?.queueWorkspaceSync(workspaceId));
     return runtime.config.tags;
   });
-  ipcMain.handle("gleandex:toggleMonitoring", (_event, paused) => {
-    runtime.config.monitoringPaused =
-      typeof paused === "boolean" ? paused : !runtime.config.monitoringPaused;
-    saveConfig(app, runtime.config);
-    return buildAppState();
+  ipcMain.handle("tuclip:toggleMonitoring", (_event, paused) => {
+    return setMonitoringPaused(paused);
   });
-  ipcMain.handle("gleandex:listPendingCaptures", () => runtime.config.pendingCaptures);
-  ipcMain.handle("gleandex:selectPendingTag", (_event, pendingId, tagId) =>
+  ipcMain.handle("tuclip:listPendingCaptures", () => runtime.config.pendingCaptures);
+  ipcMain.handle("tuclip:selectPendingTag", (_event, pendingId, tagId) =>
     selectPendingTag(pendingId, tagId),
   );
-  ipcMain.handle("gleandex:updatePendingNote", (_event, pendingId, note) =>
+  ipcMain.handle("tuclip:updatePendingNote", (_event, pendingId, note) =>
     updatePendingNote(pendingId, note),
   );
-  ipcMain.handle("gleandex:extendPopupCountdown", () => {
+  ipcMain.handle("tuclip:extendPopupCountdown", () => {
     const pending = refreshPopupExpiry();
     if (pending) {
       schedulePopupHide();
     }
     return pending;
   });
-  ipcMain.handle("gleandex:savePendingCapture", (_event, pendingId, targetWorkspaceId, openEditor) =>
+  ipcMain.handle("tuclip:savePendingCapture", (_event, pendingId, targetWorkspaceId, openEditor) =>
     savePendingCapture(pendingId, targetWorkspaceId, openEditor),
   );
-  ipcMain.handle("gleandex:discardPendingCapture", (_event, pendingId) => {
+  ipcMain.handle("tuclip:discardPendingCapture", (_event, pendingId) => {
     const pending = removePendingCapture(pendingId);
     removeFileIfExists(pending.tempPath);
     hidePopupWindow();
   });
-  ipcMain.handle("gleandex:listCaptures", (_event, workspaceId) => {
+  ipcMain.handle("tuclip:listCaptures", (_event, workspaceId) => {
     const workspace = resolveWorkspace(app, runtime.config, workspaceId);
     return listCaptures(workspace.rootPath);
   });
-  ipcMain.handle("gleandex:openCaptureInEditor", (_event, captureId, workspaceId) => {
+  ipcMain.handle("tuclip:getRemoteState", () =>
+    runtime.remote.getRemoteState(runtime.config.activeWorkspaceId ?? null),
+  );
+  ipcMain.handle("tuclip:updateRemoteConnections", (_event, patch) =>
+    runtime.remote.updateRemoteConnections(patch),
+  );
+  ipcMain.handle("tuclip:testRemoteConnection", (_event, provider, patch) =>
+    runtime.remote.testRemoteConnection(provider, patch),
+  );
+  ipcMain.handle("tuclip:updateWorkspaceRemoteSettings", (_event, workspaceId, patch) =>
+    runtime.remote.updateWorkspaceRemoteBinding(workspaceId, patch),
+  );
+  ipcMain.handle("tuclip:runWorkspaceSync", (_event, workspaceId) =>
+    runtime.remote.runWorkspaceSync(workspaceId),
+  );
+  ipcMain.handle("tuclip:retryRemoteJobs", () => runtime.remote.retryRemoteJobs());
+  ipcMain.handle("tuclip:publishCaptureNow", (_event, captureId, workspaceId) =>
+    runtime.remote.publishCaptureNow(captureId, workspaceId),
+  );
+  ipcMain.handle("tuclip:copyCaptureRemoteUrl", (_event, captureId, workspaceId) =>
+    runtime.remote.copyCaptureRemoteUrl(captureId, workspaceId),
+  );
+  ipcMain.handle("tuclip:openCaptureRemoteUrl", (_event, captureId, workspaceId) =>
+    runtime.remote.openCaptureRemoteUrl(captureId, workspaceId),
+  );
+  ipcMain.handle("tuclip:resolveSyncConflict", (_event, conflictId, action) =>
+    runtime.remote.resolveSyncConflict(conflictId, action),
+  );
+  ipcMain.handle("tuclip:openCaptureInEditor", (_event, captureId, workspaceId) => {
     const workspace = resolveWorkspace(app, runtime.config, workspaceId);
     const capture = getCapture(workspace.rootPath, captureId);
     return {
@@ -740,45 +829,52 @@ function registerIpc() {
       annotationDocument: getAnnotationDocument(workspace.rootPath, capture),
     };
   });
-  ipcMain.handle("gleandex:updateCaptureNote", (_event, captureId, workspaceId, note) =>
+  ipcMain.handle("tuclip:updateCaptureNote", (_event, captureId, workspaceId, note) =>
     updateCaptureNote(captureId, workspaceId, note),
   );
-  ipcMain.handle("gleandex:updateCaptureTag", (_event, captureId, workspaceId, tagId) =>
+  ipcMain.handle("tuclip:updateCaptureTag", (_event, captureId, workspaceId, tagId) =>
     updateCaptureTag(captureId, workspaceId, tagId),
   );
   ipcMain.handle(
-    "gleandex:saveCaptureEdit",
+    "tuclip:saveCaptureEdit",
     (_event, captureId, workspaceId, renderedPngBase64, annotationDocument) =>
       saveCaptureEdit(captureId, workspaceId, renderedPngBase64, annotationDocument),
   );
-  ipcMain.handle("gleandex:reorderCaptures", (_event, workspaceId, captureIds) => {
+  ipcMain.handle("tuclip:reorderCaptures", (_event, workspaceId, captureIds) => {
     const workspace = resolveWorkspace(app, runtime.config, workspaceId);
-    return reorderCaptures(workspace.rootPath, captureIds);
+    const reordered = reorderCaptures(workspace.rootPath, captureIds);
+    runtime.remote?.queueWorkspaceSync(workspace.id === INBOX_ID ? null : workspace.id);
+    return reordered;
   });
   ipcMain.handle(
-    "gleandex:moveCaptureToWorkspace",
+    "tuclip:moveCaptureToWorkspace",
     (_event, captureId, sourceWorkspaceId, targetWorkspaceId) =>
       moveCaptureToWorkspace(captureId, sourceWorkspaceId, targetWorkspaceId),
   );
-  ipcMain.handle("gleandex:takeEditorTarget", () => {
+  ipcMain.handle("tuclip:takeEditorTarget", () => {
     const current = runtime.config.editorTargetCaptureId;
     runtime.config.editorTargetCaptureId = null;
     saveConfig(app, runtime.config);
     return current;
   });
-  ipcMain.handle("gleandex:showMainWindow", () => showMainWindow());
-  ipcMain.handle("gleandex:hideCurrentWindow", (event) => {
+  ipcMain.handle("tuclip:showMainWindow", () => showMainWindow());
+  ipcMain.handle("tuclip:hideCurrentWindow", (event) => {
     BrowserWindow.fromWebContents(event.sender)?.hide();
   });
 }
 
 app.whenReady().then(() => {
   runtime.config = loadConfig(app);
+  runtime.remote = createRemoteServices({ app, runtime });
   createMainWindow();
   createPopupWindow();
   createTray();
   registerIpc();
   startClipboardPolling();
+  runtime.remote.scheduleEnabledWorkspaceSync();
+  runtime.syncInterval = setInterval(() => {
+    runtime.remote?.scheduleEnabledWorkspaceSync();
+  }, 120000);
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -794,6 +890,9 @@ app.on("before-quit", () => {
   runtime.isQuitting = true;
   if (runtime.clipboardInterval) {
     clearInterval(runtime.clipboardInterval);
+  }
+  if (runtime.syncInterval) {
+    clearInterval(runtime.syncInterval);
   }
 });
 

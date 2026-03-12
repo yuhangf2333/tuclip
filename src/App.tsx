@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  AlertTriangle,
+  Cloud,
   FolderPlus,
   MonitorPause,
   MonitorPlay,
+  RefreshCcw,
   Settings2,
   Sparkles,
   X,
@@ -27,9 +30,19 @@ import type {
   PendingCapture,
   PreferencesConfig,
   QuickTag,
+  RemoteProvider,
+  RemoteStatePayload,
   ShortcutConfig,
   Workspace,
 } from "./types/app";
+
+type FeedbackTone = "success" | "info" | "warning" | "error";
+
+interface AppFeedback {
+  id: number;
+  tone: FeedbackTone;
+  text: string;
+}
 
 function baseNameFromPath(filePath: string) {
   const parts = filePath.split(/[\\/]/).filter(Boolean);
@@ -47,11 +60,13 @@ function App() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [pendingCaptures, setPendingCaptures] = useState<PendingCapture[]>([]);
   const [captures, setCaptures] = useState<CaptureItem[]>([]);
+  const [remoteState, setRemoteState] = useState<RemoteStatePayload | null>(null);
   const [selectedCaptureId, setSelectedCaptureId] = useState<string | null>(null);
   const [editorDocument, setEditorDocument] = useState<EditorDocument | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [showPreferences, setShowPreferences] = useState(false);
+  const [feedback, setFeedback] = useState<AppFeedback | null>(null);
   const [prefersDark, setPrefersDark] = useState(() =>
     window.matchMedia("(prefers-color-scheme: dark)").matches,
   );
@@ -80,6 +95,18 @@ function App() {
     );
   }, [appState?.preferences?.accentTheme, appState?.preferences?.language, platform, resolvedTheme]);
 
+  useEffect(() => {
+    if (!feedback) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setFeedback(null);
+    }, 2600);
+
+    return () => window.clearTimeout(timeout);
+  }, [feedback]);
+
   const refreshCaptures = async (workspaceId = activeWorkspaceId) => {
     if (isPopup) {
       return;
@@ -93,15 +120,17 @@ function App() {
   };
 
   const refresh = async () => {
-    const [state, nextWorkspaces, nextPending] = await Promise.all([
+    const [state, nextWorkspaces, nextPending, nextRemoteState] = await Promise.all([
       api.getAppState(),
       api.listWorkspaces(),
       api.listPendingCaptures(),
+      api.getRemoteState(),
     ]);
 
     setAppState(state);
     setWorkspaces(nextWorkspaces);
     setPendingCaptures(nextPending);
+    setRemoteState(nextRemoteState);
 
     if (!isPopup) {
       const nextCaptures = await api.listCaptures(state.activeWorkspaceId);
@@ -153,6 +182,81 @@ function App() {
   const currentWorkspaceLabel = currentWorkspace?.isInbox
     ? strings.workspace.inbox
     : currentWorkspace?.name ?? strings.workspace.inbox;
+  const activeRemoteWorkspace = useMemo(
+    () => remoteState?.workspaceSettings[activeWorkspaceId ?? "inbox"] ?? null,
+    [activeWorkspaceId, remoteState],
+  );
+  const remoteEnabled = appState?.remote.enabled ?? false;
+  const remoteConfigured = remoteState?.summary.configured ?? appState?.remote.configured ?? false;
+  const remoteJobs = remoteState?.summary.pendingJobs ?? appState?.remote.pendingJobs ?? 0;
+  const remoteConflicts = remoteState?.summary.conflicts ?? appState?.remote.conflicts ?? 0;
+  const remoteFailureMessage =
+    activeRemoteWorkspace?.lastSyncStatus === "failed"
+      ? activeRemoteWorkspace.lastSyncMessage
+      : activeRemoteWorkspace?.lastPublishStatus === "failed"
+        ? activeRemoteWorkspace.lastPublishMessage
+        : remoteState?.connections.webdav.lastTestSuccess === false
+          ? remoteState.connections.webdav.lastTestMessage
+          : remoteState?.connections.s3.lastTestSuccess === false
+            ? remoteState.connections.s3.lastTestMessage
+            : "";
+  const remoteHasFailure = Boolean(
+    remoteEnabled &&
+      (
+        activeRemoteWorkspace?.lastSyncStatus === "failed" ||
+        activeRemoteWorkspace?.lastPublishStatus === "failed" ||
+        remoteState?.connections.webdav.lastTestSuccess === false ||
+        remoteState?.connections.s3.lastTestSuccess === false
+      ),
+  );
+  const remoteHasConflict = Boolean(
+    remoteEnabled &&
+      (remoteConflicts > 0 || activeRemoteWorkspace?.lastSyncStatus === "conflict"),
+  );
+  const remoteIsSyncing = Boolean(
+    remoteEnabled &&
+      (
+        remoteJobs > 0 ||
+        activeRemoteWorkspace?.lastSyncStatus === "syncing" ||
+        activeRemoteWorkspace?.lastPublishStatus === "publishing"
+      ),
+  );
+  const remoteActionsDisabled = !remoteEnabled || !remoteConfigured;
+  const s3ConnectionReady = Boolean(
+    remoteEnabled &&
+      remoteState?.connections.s3.enabled &&
+      remoteState.connections.s3.bucket &&
+      remoteState.connections.s3.accessKeyId &&
+      remoteState.connections.s3.hasSecretAccessKey,
+  );
+  const workspacePublishEnabled = Boolean(activeRemoteWorkspace?.s3Enabled);
+  const publishDisabledReason = !remoteEnabled
+    ? strings.captures.publishCloudOff
+    : !s3ConnectionReady
+      ? strings.captures.publishSetupNeeded
+      : !workspacePublishEnabled
+        ? strings.captures.publishWorkspaceOff
+        : "";
+  const remoteTone = remoteHasFailure ? "error" : remoteHasConflict ? "warning" : remoteIsSyncing ? "active" : "normal";
+  const remoteTooltip = !remoteEnabled
+    ? strings.remote.tooltipOff
+    : !remoteConfigured
+      ? strings.remote.tooltipNotConfigured
+      : remoteHasFailure
+        ? `${strings.remote.tooltipFailed}${remoteFailureMessage ? `: ${remoteFailureMessage}` : ""}`
+        : remoteHasConflict
+          ? strings.remote.tooltipConflict
+          : remoteIsSyncing
+            ? strings.remote.tooltipSyncing
+            : strings.remote.tooltipReady;
+
+  const pushFeedback = (tone: FeedbackTone, text: string) => {
+    setFeedback({
+      id: Date.now(),
+      tone,
+      text,
+    });
+  };
 
   const handleCreateWorkspace = async () => {
     const folder = await api.pickDirectory();
@@ -261,6 +365,103 @@ function App() {
           }
         : current,
     );
+  };
+
+  const handleSaveRemoteConnections = async (patch: Parameters<typeof api.updateRemoteConnections>[0]) => {
+    await api.updateRemoteConnections(patch);
+    setRemoteState(await api.getRemoteState());
+    await refresh();
+  };
+
+  const handleTestRemoteConnection = async (
+    provider: RemoteProvider,
+    patch?: Parameters<typeof api.testRemoteConnection>[1],
+  ) => {
+    await api.testRemoteConnection(provider, patch);
+    setRemoteState(await api.getRemoteState());
+    await refresh();
+  };
+
+  const handleSaveWorkspaceRemoteSettings = async (
+    workspaceId: string | null,
+    patch: Parameters<typeof api.updateWorkspaceRemoteSettings>[1],
+  ) => {
+    await api.updateWorkspaceRemoteSettings(workspaceId, patch);
+    setRemoteState(await api.getRemoteState());
+    setWorkspaces(await api.listWorkspaces());
+  };
+
+  const handleRunWorkspaceSync = async (workspaceId: string | null) => {
+    setRemoteState(await api.runWorkspaceSync(workspaceId));
+    await refresh();
+  };
+
+  const handleRetryRemoteJobs = async () => {
+    setRemoteState(await api.retryRemoteJobs());
+    await refresh();
+  };
+
+  const handleResolveSyncConflict = async (
+    conflictId: string,
+    action: "resolved" | "useIncoming" | "keepLocal",
+  ) => {
+    await api.resolveSyncConflict(conflictId, action);
+    setRemoteState(await api.getRemoteState());
+    await refresh();
+  };
+
+  const handlePublishCapture = async (captureId: string, workspaceId: string | null) => {
+    if (publishDisabledReason) {
+      pushFeedback("warning", publishDisabledReason);
+      return;
+    }
+
+    const previous = captures.find((capture) => capture.id === captureId);
+
+    try {
+      setBusy(true);
+      const updated = await api.publishCaptureNow(captureId, workspaceId);
+      if (editorDocument?.capture.id === updated.id) {
+        setEditorDocument(await api.openCaptureInEditor(updated.id, workspaceId));
+      }
+      await refresh();
+
+      if (updated.remote.publishStatus === "failed") {
+        pushFeedback("error", updated.remote.lastError || strings.captures.publishFailed);
+        return;
+      }
+
+      if (updated.remote.remoteUrl) {
+        pushFeedback(
+          "success",
+          previous?.remote.remoteUrl ? strings.captures.republishSuccess : strings.captures.publishSuccess,
+        );
+        return;
+      }
+
+      pushFeedback("info", strings.captures.publishing);
+    } catch (error) {
+      pushFeedback("error", error instanceof Error ? error.message : strings.captures.publishFailed);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleCopyCaptureRemoteUrl = async (captureId: string, workspaceId: string | null) => {
+    try {
+      await api.copyCaptureRemoteUrl(captureId, workspaceId);
+      pushFeedback("success", strings.captures.copyLinkSuccess);
+    } catch (error) {
+      pushFeedback("error", error instanceof Error ? error.message : strings.captures.publishFailed);
+    }
+  };
+
+  const handleOpenCaptureRemoteUrl = async (captureId: string, workspaceId: string | null) => {
+    try {
+      await api.openCaptureRemoteUrl(captureId, workspaceId);
+    } catch (error) {
+      pushFeedback("error", error instanceof Error ? error.message : strings.captures.publishFailed);
+    }
   };
 
   const handleSaveTags = async (tags: QuickTag[]) => {
@@ -409,6 +610,58 @@ function App() {
                   <strong>{appState?.monitoringPaused ? strings.stats.off : strings.stats.on}</strong>
                   {strings.stats.monitor}
                 </span>
+                <div className={remoteEnabled ? `cloud-status cloud-status--${remoteTone} is-open` : `cloud-status cloud-status--${remoteTone}`}>
+                  <div className="cloud-status__shell">
+                    <div className="cloud-status__expanded">
+                      <button
+                        className="cloud-status__action"
+                        disabled={remoteActionsDisabled}
+                        onClick={() => void handleRunWorkspaceSync(activeWorkspaceId)}
+                        title={
+                          !remoteEnabled
+                            ? strings.remote.tooltipOff
+                            : remoteActionsDisabled
+                              ? strings.remote.tooltipNotConfigured
+                              : strings.commands.sync
+                        }
+                        type="button"
+                      >
+                        <RefreshCcw size={12} />
+                        {strings.commands.sync}
+                      </button>
+                      <span className={remoteActionsDisabled ? "cloud-status__mini is-muted" : "cloud-status__mini"}>
+                        <strong>{remoteJobs}</strong>
+                        {strings.remote.jobs}
+                      </span>
+                      <span className={remoteActionsDisabled ? "cloud-status__mini is-muted" : "cloud-status__mini"}>
+                        <strong>{remoteConflicts}</strong>
+                        {strings.remote.conflicts}
+                      </span>
+                    </div>
+                    <button
+                      aria-label={remoteTooltip}
+                      aria-expanded={remoteEnabled}
+                      className="cloud-status__trigger"
+                      onClick={() => void handleSaveRemoteConnections({ enabled: !remoteEnabled })}
+                      type="button"
+                    >
+                      <span className="inline-stat__icon">
+                        <Cloud size={14} />
+                        {remoteEnabled && (!remoteConfigured || remoteHasConflict || remoteHasFailure) ? (
+                          <AlertTriangle
+                            className={
+                              remoteHasFailure ? "inline-stat__warning inline-stat__warning--error" : "inline-stat__warning"
+                            }
+                            size={11}
+                          />
+                        ) : null}
+                      </span>
+                      <span className="inline-stat__copy cloud-status__copy">
+                        <strong>{remoteEnabled ? strings.settings.yes : strings.settings.no}</strong>
+                      </span>
+                    </button>
+                  </div>
+                </div>
               </div>
             </header>
 
@@ -416,7 +669,12 @@ function App() {
               <CaptureGrid
                 captures={captures}
                 onOpenCapture={openCapture}
+                onCopyRemoteUrl={handleCopyCaptureRemoteUrl}
+                onOpenRemoteUrl={handleOpenCaptureRemoteUrl}
+                onPublishCapture={handlePublishCapture}
                 onReorder={handleReorder}
+                publishDisabledReason={publishDisabledReason}
+                publishEnabled={!publishDisabledReason}
                 selectedCaptureId={selectedCaptureId}
                 showTags={appState?.preferences.showWorkspaceTags ?? true}
                 strings={strings}
@@ -438,7 +696,10 @@ function App() {
           </section>
         </section>
 
-        {busy ? <div className="busy-indicator">{strings.syncing}</div> : null}
+        <div className="status-stack">
+          {feedback ? <div className={`feedback-toast is-${feedback.tone}`}>{feedback.text}</div> : null}
+          {busy ? <div className="busy-indicator">{strings.syncing}</div> : null}
+        </div>
       </section>
 
       {showPreferences && appState ? (
@@ -460,10 +721,55 @@ function App() {
             </div>
             <div className="preferences-layout">
               <PreferencesPanel
+                activeWorkspaceId={activeWorkspaceId}
                 onChange={handleSavePreferences}
+                onResolveSyncConflict={handleResolveSyncConflict}
+                onRetryRemoteJobs={handleRetryRemoteJobs}
+                onRunWorkspaceSync={handleRunWorkspaceSync}
                 onSaveShortcuts={handleSaveShortcuts}
+                onSaveRemoteConnections={handleSaveRemoteConnections}
                 onSaveTags={handleSaveTags}
+                onSaveWorkspaceRemoteSettings={handleSaveWorkspaceRemoteSettings}
+                onTestRemoteConnection={handleTestRemoteConnection}
                 preferences={appState.preferences}
+                remoteState={remoteState ?? {
+                  connections: {
+                    enabled: false,
+                    webdav: {
+                      enabled: false,
+                      baseUrl: "",
+                      username: "",
+                      rootPath: "/TuClip",
+                      hasPassword: false,
+                      lastTestedAt: null,
+                      lastTestSuccess: null,
+                      lastTestMessage: "",
+                    },
+                    s3: {
+                      enabled: false,
+                      endpoint: "",
+                      region: "auto",
+                      bucket: "",
+                      accessKeyId: "",
+                      publicBaseUrl: "",
+                      forcePathStyle: true,
+                      hasSecretAccessKey: false,
+                      lastTestedAt: null,
+                      lastTestSuccess: null,
+                      lastTestMessage: "",
+                    },
+                  },
+                  workspaceSettings: {},
+                  jobs: [],
+                  conflicts: [],
+                  summary: {
+                    enabled: false,
+                    configured: false,
+                    pendingJobs: 0,
+                    conflicts: 0,
+                    activeWorkspaceStatus: "idle",
+                  },
+                }}
                 shortcuts={appState.shortcuts}
                 strings={strings}
                 tags={appState.tags}
@@ -479,7 +785,11 @@ function App() {
           activeWorkspaceId={activeWorkspaceId}
           document={editorDocument}
           onClose={() => setEditorDocument(null)}
+          onCopyRemoteUrl={handleCopyCaptureRemoteUrl}
+          onOpenRemoteUrl={handleOpenCaptureRemoteUrl}
+          onPublishCapture={handlePublishCapture}
           onSave={handleEditorSave}
+          onSyncWorkspace={handleRunWorkspaceSync}
           preferences={appState.preferences}
           shortcuts={appState.shortcuts}
           tags={appState.tags}

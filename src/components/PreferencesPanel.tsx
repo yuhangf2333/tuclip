@@ -2,15 +2,21 @@ import { Minus, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ShortcutSettings } from "./ShortcutSettings";
+import { RemoteSettingsPanel } from "./RemoteSettingsPanel";
 import type { UiStrings } from "../lib/i18n";
 import type {
   AccentTheme,
   CloseAction,
   PreferencesConfig,
   QuickTag,
+  RemoteConnectionConfig,
+  RemoteProvider,
+  RemoteStatePayload,
   ShortcutConfig,
   ThemeMode,
+  SyncConflict,
   Workspace,
+  WorkspaceRemoteSettings,
 } from "../types/app";
 
 interface PreferencesPanelProps {
@@ -19,9 +25,33 @@ interface PreferencesPanelProps {
   strings: UiStrings;
   tags: QuickTag[];
   workspaces: Workspace[];
+  activeWorkspaceId: string | null;
+  remoteState: RemoteStatePayload;
   onChange: (next: PreferencesConfig) => Promise<void>;
   onSaveShortcuts: (shortcuts: ShortcutConfig) => Promise<void>;
   onSaveTags: (tags: QuickTag[]) => Promise<void>;
+  onSaveRemoteConnections: (patch: {
+    enabled?: boolean;
+    webdav?: Partial<RemoteConnectionConfig["webdav"]> & { password?: string };
+    s3?: Partial<RemoteConnectionConfig["s3"]> & { secretAccessKey?: string };
+  }) => Promise<void>;
+  onTestRemoteConnection: (
+    provider: RemoteProvider,
+    patch?: {
+      webdav?: Partial<RemoteConnectionConfig["webdav"]> & { password?: string };
+      s3?: Partial<RemoteConnectionConfig["s3"]> & { secretAccessKey?: string };
+    },
+  ) => Promise<void>;
+  onSaveWorkspaceRemoteSettings: (
+    workspaceId: string | null,
+    patch: Partial<WorkspaceRemoteSettings>,
+  ) => Promise<void>;
+  onRunWorkspaceSync: (workspaceId: string | null) => Promise<void>;
+  onRetryRemoteJobs: () => Promise<void>;
+  onResolveSyncConflict: (
+    conflictId: string,
+    action: "resolved" | "useIncoming" | "keepLocal",
+  ) => Promise<SyncConflict | void>;
 }
 
 const durationOptions = [4, 6, 8, 10];
@@ -30,7 +60,7 @@ const accentOptions: AccentTheme[] = ["blue", "graphite", "mint", "rose"];
 const closeActionOptions: CloseAction[] = ["tray", "quit"];
 const tagColors = ["#0f6cbd", "#0f9f6e", "#d94873", "#64748b", "#8b5cf6", "#f59e0b"];
 
-type SettingsTab = "general" | "tags" | "shortcuts";
+type SettingsTab = "general" | "tags" | "shortcuts" | "remote";
 
 export function PreferencesPanel({
   preferences,
@@ -38,9 +68,17 @@ export function PreferencesPanel({
   strings,
   tags,
   workspaces,
+  activeWorkspaceId,
+  remoteState,
   onChange,
   onSaveShortcuts,
   onSaveTags,
+  onSaveRemoteConnections,
+  onTestRemoteConnection,
+  onSaveWorkspaceRemoteSettings,
+  onRunWorkspaceSync,
+  onRetryRemoteJobs,
+  onResolveSyncConflict,
 }: PreferencesPanelProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>("general");
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -118,6 +156,7 @@ export function PreferencesPanel({
             ["general", strings.settings.general],
             ["tags", strings.settings.tags],
             ["shortcuts", strings.settings.shortcuts],
+            ["remote", strings.settings.remote],
           ] as Array<[SettingsTab, string]>).map(([tabKey, label]) => (
             <button
               className={activeTab === tabKey ? "settings-nav__button is-active" : "settings-nav__button"}
@@ -392,6 +431,21 @@ export function PreferencesPanel({
                 strings={strings}
               />
             </div>
+          ) : null}
+
+          {activeTab === "remote" ? (
+            <RemoteSettingsPanel
+              activeWorkspaceId={activeWorkspaceId}
+              onResolveConflict={onResolveSyncConflict}
+              onRetryJobs={onRetryRemoteJobs}
+              onRunWorkspaceSync={onRunWorkspaceSync}
+              onSaveConnections={onSaveRemoteConnections}
+              onSaveWorkspaceSettings={onSaveWorkspaceRemoteSettings}
+              onTestConnection={onTestRemoteConnection}
+              remoteState={remoteState}
+              strings={strings}
+              workspaces={workspaces}
+            />
           ) : null}
         </div>
       </div>

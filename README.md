@@ -1,6 +1,6 @@
-# GleanDex
+# TuClip
 
-GleanDex is a desktop app for tutorial writers who take many system screenshots and need to keep them organized, editable, and export-stable for Markdown or Typst notes.
+TuClip is a desktop app for tutorial writers who take many system screenshots and need to keep them organized, editable, and export-stable for Markdown or Typst notes.
 
 ## What it does
 
@@ -12,8 +12,7 @@ GleanDex is a desktop app for tutorial writers who take many system screenshots 
 
 ## Stack
 
-- Tauri 2
-- Rust + `rusqlite`
+- Electron
 - React + TypeScript
 - `react-konva` for the editor
 - `opencv.js` for edge snapping
@@ -23,12 +22,12 @@ GleanDex is a desktop app for tutorial writers who take many system screenshots 
 
 ```bash
 npm install
-npm run tauri dev
+npm run dev
 ```
 
 ## Verification
 
 ```bash
 npm run build
-cd src-tauri && cargo check
+npm test
 ```

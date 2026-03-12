@@ -143,7 +143,11 @@ export function PopupShell({
       window.clearTimeout(noteSaveTimer.current);
       noteSaveTimer.current = null;
     }
-    await api.updatePendingNote(pending.id, note);
+    try {
+      await api.updatePendingNote(pending.id, note);
+    } catch {
+      return;
+    }
   };
 
   const handleNoteChange = (value: string) => {
@@ -155,7 +159,7 @@ export function PopupShell({
       window.clearTimeout(noteSaveTimer.current);
     }
     noteSaveTimer.current = window.setTimeout(() => {
-      void api.updatePendingNote(pending.id, value);
+      void api.updatePendingNote(pending.id, value).catch(() => undefined);
     }, 220);
   };
 

@@ -3,6 +3,16 @@ import { describe, expect, it } from "vitest";
 import { buildCaptureTagGroups } from "./capture-groups";
 import type { CaptureItem, WorkspaceTag } from "../types/app";
 
+const defaultRemote = {
+  syncStatus: "idle",
+  publishStatus: "idle",
+  remoteUrl: null,
+  remoteObjectKey: null,
+  lastSyncedAt: null,
+  lastPublishedAt: null,
+  lastError: "",
+} as const;
+
 function createCapture(id: string, orderIndex: number, tagId: string | null): CaptureItem {
   return {
     id,
@@ -15,6 +25,7 @@ function createCapture(id: string, orderIndex: number, tagId: string | null): Ca
     sourceHash: `hash-${id}`,
     tagId,
     note: "",
+    remote: { ...defaultRemote },
   };
 }
 

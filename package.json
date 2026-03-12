@@ -1,6 +1,6 @@
 {
-  "name": "gleandex",
-  "productName": "GleanDex",
+  "name": "tuclip",
+  "productName": "TuClip",
   "private": true,
   "version": "0.1.0",
   "main": "electron/main.cjs",
@@ -15,6 +15,7 @@
     "start": "electron ."
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1005.0",
     "@fontsource/manrope": "^5.2.8",
     "@techstark/opencv-js": "^4.12.0-release.1",
     "@tesseract.js-data/chi_sim": "^1.0.0",
@@ -26,7 +27,8 @@
     "react-dom": "^19.1.0",
     "react-konva": "^19.2.3",
     "tesseract.js": "^7.0.0",
-    "use-image": "^1.1.4"
+    "use-image": "^1.1.4",
+    "webdav": "^5.9.0"
   },
   "devDependencies": {
     "@types/react": "^19.1.8",

@@ -44,6 +44,10 @@ interface CaptureEditorProps {
   workspaces: Workspace[];
   activeWorkspaceId: string | null;
   onClose: () => void;
+  onSyncWorkspace: (workspaceId: string | null) => Promise<void>;
+  onPublishCapture: (captureId: string, workspaceId: string | null) => Promise<void>;
+  onCopyRemoteUrl: (captureId: string, workspaceId: string | null) => Promise<void>;
+  onOpenRemoteUrl: (captureId: string, workspaceId: string | null) => Promise<void>;
   onSave: (
     renderedPngBase64: string,
     annotationDocument: AnnotationDocument,
@@ -84,6 +88,12 @@ interface EditorCopy {
   cropHint: string;
   note: string;
   zoom: string;
+  remote: string;
+  sync: string;
+  publish: string;
+  copyLink: string;
+  openRemote: string;
+  remoteUrl: string;
   toolLabels: Record<Tool, string>;
 }
 
@@ -193,6 +203,12 @@ function editorCopy(language: PreferencesConfig["language"]): EditorCopy {
       cropHint: "裁剪只影响公开展示图，原图和历史编辑版本仍然保留在归档里。",
       note: "备注",
       zoom: "缩放",
+      remote: "远程",
+      sync: "同步",
+      publish: "发布",
+      copyLink: "复制链接",
+      openRemote: "打开远端",
+      remoteUrl: "远程链接",
       toolLabels: {
         select: "选择",
         rect: "框",
@@ -236,6 +252,12 @@ function editorCopy(language: PreferencesConfig["language"]): EditorCopy {
     cropHint: "Crop only changes the public render. Originals and edited versions stay archived.",
     note: "Note",
     zoom: "Zoom",
+    remote: "Remote",
+    sync: "Sync",
+    publish: "Publish",
+    copyLink: "Copy link",
+    openRemote: "Open remote",
+    remoteUrl: "Remote URL",
     toolLabels: {
       select: "Select",
       rect: "Rect",
@@ -262,6 +284,17 @@ function roundRect(
   ctx.arcTo(x, y + height, x, y, safe);
   ctx.arcTo(x, y, x + width, y, safe);
   ctx.closePath();
+}
+
+function stringsFromStatus(
+  language: PreferencesConfig["language"],
+  publishStatus: CaptureItem["remote"]["publishStatus"],
+  syncStatus: CaptureItem["remote"]["syncStatus"],
+) {
+  if (language === "zh") {
+    return `${syncStatus === "synced" ? "已同步" : syncStatus === "syncing" ? "同步中" : syncStatus === "failed" ? "同步失败" : syncStatus === "conflict" ? "同步冲突" : "未同步"} / ${publishStatus === "published" ? "已发布" : publishStatus === "publishing" ? "发布中" : publishStatus === "failed" ? "发布失败" : "未发布"}`;
+  }
+  return `${syncStatus} / ${publishStatus}`;
 }
 
 function renderToDataUrl(image: HTMLImageElement, annotationDoc: AnnotationDocument): string {
@@ -391,6 +424,10 @@ export function CaptureEditor({
   workspaces,
   activeWorkspaceId,
   onClose,
+  onSyncWorkspace,
+  onPublishCapture,
+  onCopyRemoteUrl,
+  onOpenRemoteUrl,
   onSave,
 }: CaptureEditorProps) {
   const [image] = useImage(api.fileUrl(document.capture.publicPath), "anonymous");
@@ -859,7 +896,7 @@ export function CaptureEditor({
       <div className="editor-shell glass-card">
         <header className="editor-topbar">
           <div>
-            <h3>GleanDex</h3>
+            <h3>TuClip</h3>
           </div>
           <div className="toolbar-cluster">
             <button className="ghost-button" onClick={handleClose} type="button">
@@ -1487,6 +1524,57 @@ export function CaptureEditor({
                     value={captureNote}
                   />
                 </label>
+              </div>
+            </section>
+
+            <section className="glass-card editor-panel">
+              <div className="panel-heading">
+                <div>
+                  <p className="eyebrow">{copy.remote}</p>
+                  <h4>{stringsFromStatus(preferences.language, document.capture.remote.publishStatus, document.capture.remote.syncStatus)}</h4>
+                </div>
+              </div>
+              <div className="editor-fields">
+                <label>
+                  <span>{copy.remoteUrl}</span>
+                  <input readOnly value={document.capture.remote.remoteUrl ?? ""} />
+                </label>
+              </div>
+              <div className="editor-actions">
+                <button
+                  className="ghost-button"
+                  onClick={() => void onSyncWorkspace(document.capture.workspaceId === "inbox" ? null : document.capture.workspaceId)}
+                  type="button"
+                >
+                  <Save size={16} />
+                  {copy.sync}
+                </button>
+                <button
+                  className="ghost-button"
+                  onClick={() => void onPublishCapture(document.capture.id, document.capture.workspaceId === "inbox" ? null : document.capture.workspaceId)}
+                  type="button"
+                >
+                  <Save size={16} />
+                  {copy.publish}
+                </button>
+                {document.capture.remote.remoteUrl ? (
+                  <>
+                    <button
+                      className="ghost-button"
+                      onClick={() => void onCopyRemoteUrl(document.capture.id, document.capture.workspaceId === "inbox" ? null : document.capture.workspaceId)}
+                      type="button"
+                    >
+                      {copy.copyLink}
+                    </button>
+                    <button
+                      className="ghost-button"
+                      onClick={() => void onOpenRemoteUrl(document.capture.id, document.capture.workspaceId === "inbox" ? null : document.capture.workspaceId)}
+                      type="button"
+                    >
+                      {copy.openRemote}
+                    </button>
+                  </>
+                ) : null}
               </div>
             </section>
 

@@ -70,16 +70,19 @@ export function PendingPanel({
                   </div>
                   {pending.note ? <p className="capture-note">{pending.note}</p> : null}
                   <div className="pending-row__actions">
-                    <button className="ghost-button" onClick={() => void onSave(pending.id, false)} type="button">
-                      <Save size={15} />
-                      {strings.pending.save}
-                    </button>
-                    <button className="ghost-button" onClick={() => void onSave(pending.id, true)} type="button">
-                      <PencilLine size={15} />
-                      {strings.pending.edit}
-                    </button>
+                    <div className="pending-row__action-group">
+                      <button className="ghost-button" onClick={() => void onSave(pending.id, false)} type="button">
+                        <Save size={15} />
+                        {strings.pending.save}
+                      </button>
+                      <button className="ghost-button" onClick={() => void onSave(pending.id, true)} type="button">
+                        <PencilLine size={15} />
+                        {strings.pending.edit}
+                      </button>
+                    </div>
                     <button
-                      className="icon-button subtle danger"
+                      aria-label={strings.pending.discard}
+                      className="icon-button subtle danger pending-row__delete"
                       onClick={() => void onDiscard(pending.id)}
                       title={strings.pending.discard}
                       type="button"
