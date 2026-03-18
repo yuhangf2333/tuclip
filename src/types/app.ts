@@ -73,7 +73,7 @@ export interface ShortcutConfig {
 
 export type LanguageCode = "en" | "zh";
 export type ThemeMode = "system" | "light" | "dark";
-export type AccentTheme = "blue" | "graphite" | "mint" | "rose";
+export type AccentTheme = "blue" | "graphite" | "mint" | "rose" | "custom";
 export type DetectionPreset = "balanced" | "dense" | "focused";
 export type CloseAction = "tray" | "quit";
 export type RemoteJobKind = "workspace-sync" | "capture-publish";
@@ -86,6 +86,7 @@ export interface PreferencesConfig {
   language: LanguageCode;
   themeMode: ThemeMode;
   accentTheme: AccentTheme;
+  customAccentColor: string;
   popupDurationSeconds: number;
   extendPopupOnInteraction: boolean;
   showWorkspaceTags: boolean;

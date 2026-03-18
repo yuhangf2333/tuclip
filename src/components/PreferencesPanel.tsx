@@ -1,4 +1,5 @@
 import { Minus, Plus, Trash2 } from "lucide-react";
+import type { CSSProperties } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ShortcutSettings } from "./ShortcutSettings";
@@ -56,7 +57,7 @@ interface PreferencesPanelProps {
 
 const durationOptions = [4, 6, 8, 10];
 const themeOptions: ThemeMode[] = ["system", "light", "dark"];
-const accentOptions: AccentTheme[] = ["blue", "graphite", "mint", "rose"];
+const accentOptions: AccentTheme[] = ["blue", "graphite", "mint", "rose", "custom"];
 const closeActionOptions: CloseAction[] = ["tray", "quit"];
 const tagColors = ["#0f6cbd", "#0f9f6e", "#d94873", "#64748b", "#8b5cf6", "#f59e0b"];
 
@@ -93,6 +94,13 @@ export function PreferencesPanel({
   const shiftDuration = async (delta: number) => {
     await savePatch({
       popupDurationSeconds: Math.max(3, Math.min(12, preferences.popupDurationSeconds + delta)),
+    });
+  };
+
+  const updateCustomAccent = async (customAccentColor: string) => {
+    await savePatch({
+      accentTheme: "custom",
+      customAccentColor,
     });
   };
 
@@ -226,23 +234,48 @@ export function PreferencesPanel({
 
                   <div className="settings-row settings-row--top">
                     <span>{strings.settings.accent}</span>
-                    <div className="swatch-list">
-                      {accentOptions.map((accent) => (
-                        <button
-                          className={
-                            preferences.accentTheme === accent
-                              ? "swatch-button is-active"
-                              : "swatch-button"
-                          }
-                          key={accent}
-                          onClick={() => void savePatch({ accentTheme: accent })}
-                          title={strings.accents[accent]}
-                          type="button"
-                        >
-                          <span className={`swatch-dot swatch-dot--${accent}`} />
-                          <span>{strings.accents[accent]}</span>
-                        </button>
-                      ))}
+                    <div className="swatch-list swatch-list--with-custom">
+                      {accentOptions.map((accent) =>
+                        accent === "custom" ? (
+                          <label
+                            className={
+                              preferences.accentTheme === "custom"
+                                ? "swatch-button swatch-custom-picker is-active"
+                                : "swatch-button swatch-custom-picker"
+                            }
+                            key={accent}
+                            onClick={() => void savePatch({ accentTheme: "custom" })}
+                            title={strings.accents[accent]}
+                          >
+                            <span
+                              className="swatch-dot swatch-dot--custom"
+                              style={{ "--swatch-custom-color": preferences.customAccentColor } as CSSProperties}
+                            />
+                            <span>{strings.accents[accent]}</span>
+                            <input
+                              aria-label={strings.settings.customAccent}
+                              onChange={(event) => void updateCustomAccent(event.target.value)}
+                              type="color"
+                              value={preferences.customAccentColor}
+                            />
+                          </label>
+                        ) : (
+                          <button
+                            className={
+                              preferences.accentTheme === accent
+                                ? "swatch-button is-active"
+                                : "swatch-button"
+                            }
+                            key={accent}
+                            onClick={() => void savePatch({ accentTheme: accent })}
+                            title={strings.accents[accent]}
+                            type="button"
+                          >
+                            <span className={`swatch-dot swatch-dot--${accent}`} />
+                            <span>{strings.accents[accent]}</span>
+                          </button>
+                        ),
+                      )}
                     </div>
                   </div>
                 </section>

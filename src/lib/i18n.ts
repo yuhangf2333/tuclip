@@ -105,6 +105,7 @@ export interface UiStrings {
     language: string;
     theme: string;
     accent: string;
+    customAccent: string;
     popupTime: string;
     extendPopup: string;
     showWorkspaceTags: string;
@@ -278,6 +279,7 @@ const en: UiStrings = {
     language: "Language",
     theme: "Theme",
     accent: "Accent",
+    customAccent: "Custom color",
     popupTime: "Popup time",
     extendPopup: "Extend on hover",
     showWorkspaceTags: "Show workspace tags",
@@ -365,6 +367,7 @@ const en: UiStrings = {
     graphite: "Graphite",
     mint: "Mint",
     rose: "Rose",
+    custom: "Custom",
   },
   detections: {
     balanced: "Balanced",
@@ -498,6 +501,7 @@ const zh: UiStrings = {
     language: "语言",
     theme: "主题",
     accent: "色彩",
+    customAccent: "自定颜色",
     popupTime: "弹窗时长",
     extendPopup: "交互时延长",
     showWorkspaceTags: "显示工作区标签",
@@ -585,6 +589,7 @@ const zh: UiStrings = {
     graphite: "石墨",
     mint: "薄荷",
     rose: "玫瑰",
+    custom: "自定",
   },
   detections: {
     balanced: "平衡",

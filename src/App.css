@@ -185,6 +185,7 @@ html[data-theme="dark"] .shortcut-chip,
 html[data-theme="dark"] .segmented-button,
 html[data-theme="dark"] .duration-chip,
 html[data-theme="dark"] .swatch-button,
+html[data-theme="dark"] .swatch-custom-picker,
 html[data-theme="dark"] .keyboard-key {
   border-color: rgb(255 255 255 / 0.14);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08);
@@ -198,7 +199,8 @@ html[data-theme="dark"] .tool-button:hover,
 html[data-theme="dark"] .shortcut-chip:hover,
 html[data-theme="dark"] .segmented-button:hover,
 html[data-theme="dark"] .duration-chip:hover,
-html[data-theme="dark"] .swatch-button:hover {
+html[data-theme="dark"] .swatch-button:hover,
+html[data-theme="dark"] .swatch-custom-picker:hover {
   background: rgb(255 255 255 / 0.12);
   border-color: rgb(255 255 255 / 0.22);
 }
@@ -2109,6 +2111,10 @@ html[data-platform="mac"] .editor-topbar {
   justify-content: flex-start;
 }
 
+.swatch-list--with-custom {
+  align-items: center;
+}
+
 .swatch-dot {
   width: 10px;
   height: 10px;
@@ -2130,6 +2136,45 @@ html[data-platform="mac"] .editor-topbar {
 
 .swatch-dot--rose {
   background: #d94873;
+}
+
+.swatch-dot--custom {
+  background: var(--swatch-custom-color, var(--accent));
+}
+
+.swatch-custom-picker {
+  justify-content: flex-start;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.swatch-custom-picker input[type="color"] {
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  min-height: 20px;
+  padding: 0;
+  border-radius: 999px;
+  border: 0;
+  background: none;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.08);
+  cursor: pointer;
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+
+.swatch-custom-picker input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.swatch-custom-picker input[type="color"]::-webkit-color-swatch {
+  border: 0;
+  border-radius: 999px;
+}
+
+.swatch-custom-picker input[type="color"]::-moz-color-swatch {
+  border: 0;
+  border-radius: 999px;
 }
 
 .stepper-control {

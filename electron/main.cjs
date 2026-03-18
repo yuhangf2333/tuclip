@@ -212,6 +212,17 @@ function popupDurationMs() {
   return Math.max(3, seconds) * 1000;
 }
 
+function normalizeHexColor(value, fallback = "#0f6cbd") {
+  const candidate = String(value || "").trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(candidate)) {
+    return candidate.toLowerCase();
+  }
+  if (/^#[0-9a-fA-F]{3}$/.test(candidate)) {
+    return `#${candidate[1]}${candidate[1]}${candidate[2]}${candidate[2]}${candidate[3]}${candidate[3]}`.toLowerCase();
+  }
+  return fallback;
+}
+
 function refreshPopupExpiry() {
   const current = runtime.config?.pendingCaptures?.[0];
   if (!current) {
@@ -736,9 +747,16 @@ function registerIpc() {
   ipcMain.handle("tuclip:updatePreferences", (_event, preferences) => {
     const nextCloseAction =
       preferences?.closeAction === "quit" ? "quit" : "tray";
+    const nextAccentTheme = ["blue", "graphite", "mint", "rose", "custom"].includes(preferences?.accentTheme)
+      ? preferences.accentTheme
+      : runtime.config.preferences.accentTheme;
     runtime.config.preferences = {
       ...runtime.config.preferences,
       ...preferences,
+      accentTheme: nextAccentTheme,
+      customAccentColor: normalizeHexColor(
+        preferences?.customAccentColor ?? runtime.config.preferences.customAccentColor,
+      ),
       popupDurationSeconds: Math.max(
         3,
         Math.min(12, Math.round(Number(preferences?.popupDurationSeconds ?? runtime.config.preferences.popupDurationSeconds))),

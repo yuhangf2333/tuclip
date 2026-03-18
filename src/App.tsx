@@ -90,10 +90,17 @@ function App() {
     applyAppearance(
       resolvedTheme,
       appState?.preferences?.accentTheme ?? "blue",
+      appState?.preferences?.customAccentColor ?? "#0f6cbd",
       appState?.preferences?.language ?? "en",
       platform,
     );
-  }, [appState?.preferences?.accentTheme, appState?.preferences?.language, platform, resolvedTheme]);
+  }, [
+    appState?.preferences?.accentTheme,
+    appState?.preferences?.customAccentColor,
+    appState?.preferences?.language,
+    platform,
+    resolvedTheme,
+  ]);
 
   useEffect(() => {
     if (!feedback) {

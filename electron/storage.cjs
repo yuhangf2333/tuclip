@@ -25,6 +25,7 @@ const DEFAULT_PREFERENCES = {
   language: "en",
   themeMode: "system",
   accentTheme: "blue",
+  customAccentColor: "#0f6cbd",
   popupDurationSeconds: 6,
   extendPopupOnInteraction: true,
   showWorkspaceTags: true,
