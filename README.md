@@ -10,8 +10,7 @@
     <img src="https://img.shields.io/badge/Electron-40-47848F?logo=electron&logoColor=white" alt="Electron">
     <img src="https://img.shields.io/badge/React-19-20232A?logo=react&logoColor=61DAFB" alt="React">
     <img src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white" alt="TypeScript">
-    <img src="https://img.shields.io/badge/macOS-supported-111111?logo=apple&logoColor=white" alt="macOS">
-    <img src="https://img.shields.io/badge/Windows-supported-0078D4?logo=windows&logoColor=white" alt="Windows">
+    <img src="https://img.shields.io/badge/macOS-only-111111?logo=apple&logoColor=white" alt="macOS only">
   </p>
 </div>
 
@@ -26,6 +25,7 @@ TuClip 是一个截图管理工具。
 
 - Node.js `20.19+` 或 `22.12+`
 - npm
+- 当前仅支持 macOS
 
 第一次运行：
 
@@ -52,6 +52,8 @@ npm start
 ```bash
 npm run build
 ```
+
+> 说明：当前版本依赖 macOS 专用的窗口效果与运行逻辑，暂不支持 Windows。
 
 ## 界面预览
 

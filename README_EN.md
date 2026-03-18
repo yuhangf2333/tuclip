@@ -9,8 +9,7 @@
     <img src="https://img.shields.io/badge/Electron-40-47848F?logo=electron&logoColor=white" alt="Electron">
     <img src="https://img.shields.io/badge/React-19-20232A?logo=react&logoColor=61DAFB" alt="React">
     <img src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white" alt="TypeScript">
-    <img src="https://img.shields.io/badge/macOS-supported-111111?logo=apple&logoColor=white" alt="macOS">
-    <img src="https://img.shields.io/badge/Windows-supported-0078D4?logo=windows&logoColor=white" alt="Windows">
+    <img src="https://img.shields.io/badge/macOS-only-111111?logo=apple&logoColor=white" alt="macOS only">
   </p>
 </div>
 
@@ -25,6 +24,7 @@ Requirements:
 
 - Node.js `20.19+` or `22.12+`
 - npm
+- macOS only
 
 First-time setup:
 
@@ -51,6 +51,8 @@ Build:
 ```bash
 npm run build
 ```
+
+> Note: the current version depends on macOS-specific window effects and runtime behavior, so Windows is not supported yet.
 
 ## Screenshot
 
